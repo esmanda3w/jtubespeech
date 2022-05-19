@@ -12,15 +12,15 @@ def parse_args():
     description="Retrieving whether subtitles exists or not.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
   )
-  parser.add_argument("--language",     type=str, help="the targeted language code (ISO 639-1) (ja, en, ...)")
-  parser.add_argument("--raw_csv",      type=str, help="filepath of the raw csv that is yet to be splitted")  
-  parser.add_argument("--entries",      type=int, default=50, help="number of entries per csv file")
+  parser.add_argument("--language_list",    type=str, help="delimited (_) list of target language codes (ISO 639-1) (ja, en, ...)")
+  parser.add_argument("--raw_csv",          type=str, help="filepath of the raw csv that is yet to be splitted")  
+  parser.add_argument("--entries",          type=int, default=50, help="number of entries per csv file")
   
   return parser.parse_args(sys.argv[1:])
 
 class DataframePruningAndBatching():
-    def __init__(self, lang_code, source_csv_path, dest_dir, entries_per_csv):
-        self.lang_code = lang_code
+    def __init__(self, lang_codes, source_csv_path, dest_dir, entries_per_csv):
+        self.lang_codes = lang_codes
         self.source_csv_path = source_csv_path
         self.dest_dir = dest_dir
         self.entries_per_csv = entries_per_csv
@@ -30,10 +30,12 @@ class DataframePruningAndBatching():
         df_ = pd.read_csv(self.source_csv_path)
 
         # creates new dataframe with only column 'sub' == True
-        df = df_[df_['sub'] == True]
+        df = df_.copy()
+        for lang in self.lang_codes:
+            df = df[df[f"sub_{lang}"] == True]
 
         # reoder the dataframe by the 'auto' column
-        df = df.sort_values(by=['auto'], ascending=True)
+        # df = df.sort_values(by=['auto'], ascending=True)
 
         # split the csv files into batches of csv files
         self.split_into_batches(df)
@@ -59,7 +61,7 @@ if __name__ == '__main__':
     # passing arguments
     args = parse_args()
   
-    df_batching = DataframePruningAndBatching(lang_code=args.language, 
+    df_batching = DataframePruningAndBatching(lang_codes=args.language_list.split("_"), 
                                               source_csv_path=args.raw_csv, 
                                               dest_dir=os.path.dirname(args.raw_csv), 
                                               entries_per_csv=args.entries)

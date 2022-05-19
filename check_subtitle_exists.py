@@ -15,7 +15,7 @@ def parse_args():
         description="Retrieving whether subtitles exists or not.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--language",           type=str, help="the targeted language code (ISO 639-1) (eg. ja, en, ...)")
+    parser.add_argument("--language_list",      type=str, help="delimited (_) list of target language codes (ISO 639-1) (eg. ja, en, ...)")
     parser.add_argument("--video_id_list",      type=str, help="filename of video ID list")
     parser.add_argument("--main_outdir",        type=str, default="video_id_with_sub", help="main output directory")
     parser.add_argument("--sub_outdir",         type=str, help="sub output directory")
@@ -35,8 +35,7 @@ def create_new_dir(directory: str) -> None:
     except OSError as error:
         pass # directory already exists!
 
-def retrieve_subtitle_exists(lang, fn_videoid, main_outdir, sub_outdir, sub_sub_outdir, csv_filepath, wait_sec=0.2, fn_checkpoint=None):
-
+def retrieve_subtitle_exists(lang_list, fn_videoid, main_outdir, sub_outdir, sub_sub_outdir, csv_filepath, wait_sec=0.2, fn_checkpoint=None):
     # create new directory and the subsequent sub directories to store the final csv file
     create_new_dir(main_outdir)
     create_new_dir(sub_outdir)
@@ -51,7 +50,11 @@ def retrieve_subtitle_exists(lang, fn_videoid, main_outdir, sub_outdir, sub_sub_
     # if file exists, load it and restart retrieving.
     if fn_checkpoint is None:
         subtitle_exists = pd.DataFrame(
-            {"videoid": [], "auto": [], "sub": []}, dtype=str)
+            {"videoid": []}, dtype=str)
+
+        for lang in lang_list:
+            subtitle_exists[f"auto_{lang}"] = []
+            subtitle_exists[f"sub_{lang}"] = []
     else:
         subtitle_exists = pd.read_csv(fn_checkpoint)
 
@@ -65,14 +68,20 @@ def retrieve_subtitle_exists(lang, fn_videoid, main_outdir, sub_outdir, sub_sub_
         # send query to YouTube
         url = make_video_url(videoid)
         try:
-            result = subprocess.check_output(f"youtube-dl --list-subs --sub-lang {lang} --skip-download {url}",
+            languages = ",".join(lang_list)
+            result = subprocess.check_output(f"youtube-dl --list-subs --sub-lang {languages} --skip-download {url}",
                                              shell=True, universal_newlines=True)
             auto_lang, manu_lang = get_subtitle_language(result)
         #   subtitle_exists = subtitle_exists.append( \
         #     {"videoid": videoid, "auto": lang in auto_lang, "sub": lang in manu_lang},
         #     ignore_index=True)
-            subtitle_exists = pd.concat([subtitle_exists, pd.DataFrame.from_records(
-                [{"videoid": videoid, "auto": lang in auto_lang, "sub": lang in manu_lang}])])
+
+            new_row = {"videoid": videoid}
+            for lang in lang_list:
+                new_row[f"auto_{lang}"] = lang in auto_lang
+                new_row[f"sub_{lang}"] = lang in manu_lang
+
+            subtitle_exists = pd.concat([subtitle_exists, pd.DataFrame.from_records([new_row])])
             n_video += 1
         except:
             pass
@@ -93,11 +102,11 @@ def retrieve_subtitle_exists(lang, fn_videoid, main_outdir, sub_outdir, sub_sub_
 if __name__ == "__main__":
     args = parse_args()
 
-    filename = retrieve_subtitle_exists(lang=args.language, 
+    filename = retrieve_subtitle_exists(lang_list=args.language_list.split("_"), 
                                         fn_videoid=args.video_id_list,
                                         main_outdir=args.main_outdir, 
                                         sub_outdir=args.sub_outdir, 
                                         sub_sub_outdir=args.sub_sub_outdir, 
                                         csv_filepath=args.csv_filepath)
 
-    print(f"save {args.language.upper()} subtitle info to {filename}.")
+    print(f"save {args.language_list.upper()} subtitle info to {filename}.")

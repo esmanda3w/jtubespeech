@@ -8,10 +8,11 @@ import re
 
 class RestructureFileDirectoryJtubespeech:
 
-    def __init__(self, root_folder, dest_folder, file_type):
+    def __init__(self, root_folder, dest_folder, file_type, append_lang_to_filename=None):
         self.root_folder = root_folder
         self.dest_folder = dest_folder
         self.file_type = file_type
+        self.append_lang_to_filename = append_lang_to_filename
 
     # create new directory and ignore already created ones
     def create_new_dir(self, directory):
@@ -40,6 +41,11 @@ class RestructureFileDirectoryJtubespeech:
                 # copy vtt or wav files
                 if os.path.isfile(source):
                     shutil.copy(source, destination)
+
+                    # differentiate between vtt files of different languages
+                    if self.append_lang_to_filename != None:
+                        print(destination)
+                        os.rename(destination, destination[:-4] + "_" + self.append_lang_to_filename + ".vtt")
         print(f'Moved: {self.file_type}')
 
     def __call__(self):

@@ -16,14 +16,14 @@ def parse_args():
         description="Downloading videos with subtitle.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--language",   type=str, help="language code (ISO 639-1) (ja, en, ...)")
-    parser.add_argument("--sublist",    type=str, help="batched csv file with a list of video IDs with subtitles")
-    parser.add_argument("--outdir",     type=str, default="video", help="dirname to save videos")
-    parser.add_argument("--keeporg",    action='store_true', default=False, help="keep original audio file.")
+    parser.add_argument("--language_list",   type=str, help="delimited (_) language code (ISO 639-1) (ja, en, ...)")
+    parser.add_argument("--sublist",         type=str, help="batched csv file with a list of video IDs with subtitles")
+    parser.add_argument("--outdir",          type=str, default="video", help="dirname to save videos")
+    parser.add_argument("--keeporg",         action='store_true', default=False, help="keep original audio file.")
 
     return parser.parse_args(sys.argv[1:])
 
-def download_video(lang, fn_sub, outdir="video", wait_sec=10, keep_org=False):
+def download_video(lang_list, fn_sub, outdir="video", wait_sec=10, keep_org=False):
     """
     Tips:
       If you want to download automatic subtitles instead of manual subtitles, please change as follows.
@@ -32,6 +32,7 @@ def download_video(lang, fn_sub, outdir="video", wait_sec=10, keep_org=False):
         3. replace vtt2txt() with autovtt2txt()
         4 (optional). change fn["vtt"] (path to save subtitle) to another. 
     """
+    lang_dir = "_".join(lang_list)
 
     # parse args to take in the language code
     args = parse_args()
@@ -41,26 +42,35 @@ def download_video(lang, fn_sub, outdir="video", wait_sec=10, keep_org=False):
     # initialise number of successful scrape
     success_count = 0
 
-    for videoid in tqdm(sub[sub["sub"] == True]["videoid"]):  # manual subtitle only
+    # for videoid in tqdm(sub[sub[f"sub_{lang}"] == True]["videoid"]):  # manual subtitle only
+    for videoid in tqdm(sub["videoid"]):
+        file_formats = ["wav", "wav16k"]
+        # append language to vtt and txt files (subtitle files)
+        for lang in lang_list:
+            file_formats.append(f"vtt_{lang}")
+            file_formats.append(f"txt_{lang}")
+
         fn = {}
-        for k in ["wav", "wav16k", "vtt", "txt"]:
-            fn[k] = Path(outdir) / lang / k / \
+        for k in file_formats:
+            fn[k] = Path(outdir) / lang_dir / k / \
                 (make_basename(videoid) + "." + k[:3])
             fn[k].parent.mkdir(parents=True, exist_ok=True)
 
-        if not fn["wav16k"].exists() or not fn["txt"].exists():
+        if not fn["wav16k"].exists():
             print(videoid)
 
             # download
             url = make_video_url(videoid)
             base = fn["wav"].parent.joinpath(fn["wav"].stem)
+            languages = ",".join(lang_list)
             cp = subprocess.run(
-                f"youtube-dl --sub-lang {lang} --extract-audio --audio-format wav --write-sub {url} -o {base}.\%\(ext\)s", shell=True, universal_newlines=True)
+                f"youtube-dl --sub-lang {languages} --extract-audio --audio-format wav --write-sub {url} -o {base}.\%\(ext\)s", shell=True, universal_newlines=True)
             if cp.returncode != 0:
                 print(f"Failed to download the video: url = {url}")
                 continue
             try:
-                shutil.move(f"{base}.{lang}.vtt", fn["vtt"])
+                for lang in lang_list:
+                    shutil.move(f"{base}.{lang}.vtt", fn[f"vtt_{lang}"])
             except Exception as e:
                 print(
                     f"Failed to rename subtitle file. The download may have failed: url = {url}, filename = {base}.{lang}.vtt, error = {e}")
@@ -68,13 +78,14 @@ def download_video(lang, fn_sub, outdir="video", wait_sec=10, keep_org=False):
 
             # vtt -> txt (reformatting)
             try:
-                txt = vtt2txt(open(fn["vtt"], "r").readlines())
-                with open(fn["txt"], "w") as f:
-                    f.writelines(
-                        [f"{t[0]:1.3f}\t{t[1]:1.3f}\t\"{t[2]}\"\n" for t in txt])
+                for lang in lang_list:
+                    txt = vtt2txt(open(fn[f"vtt_{lang}"], "r").readlines())
+                    with open(fn[f"txt_{lang}"], "w") as f:
+                        f.writelines(
+                            [f"{t[0]:1.3f}\t{t[1]:1.3f}\t\"{t[2]}\"\n" for t in txt])
             except Exception as e:
                 print(
-                    f"Falied to convert subtitle file to txt file: url = {url}, filename = {fn['vtt']}, error = {e}")
+                    f"Falied to convert subtitle file to txt file: url = {url}, filename = {fn[f'vtt_{lang}']}, error = {e}")
                 continue
 
             # wav -> wav16k (resampling to 16kHz, 1ch)
@@ -99,16 +110,16 @@ def download_video(lang, fn_sub, outdir="video", wait_sec=10, keep_org=False):
         success_count += 1
 
     print('\n---------------------------------\n')
-    print(f'Number of successful scrape in this batch: {success_count}/{len(sub[sub["sub"] == True]["videoid"])}')
+    print(f'Number of successful scrape in this batch: {success_count}/{len(sub["videoid"])}')
     print('\n---------------------------------\n')
-    return Path(outdir) / lang
+    return Path(outdir) / lang_dir
 
 
 if __name__ == "__main__":
     args = parse_args()
 
-    dirname = download_video(lang=args.language, 
+    dirname = download_video(lang_list=args.language_list.split("_"), 
                              fn_sub=args.sublist, 
                              outdir=args.outdir)
 
-    print(f"save {args.language.upper()} videos to {dirname}.")
+    print(f"save {args.language_list.upper()} videos to {dirname}.")

@@ -14,7 +14,7 @@ def parse_args():
     )
     parser.add_argument("--root_folder",                type=str, help="the folder where the raw vtt and wav16k folder resides")
     parser.add_argument("--dest_folder_name",           type=str, help="the directory name created to store the restructured data for the preprocessing task")
-    parser.add_argument("--file_type_vtt",              type=str, help="file type of the folder name needed to extract the transcript")
+    parser.add_argument("--file_type_vtt",              type=str, help="delimited (&) file type(s) of the folder name needed to extract the transcript")
     parser.add_argument("--file_type_wav",              type=str, help="file type of the folder name needed to extract the raw audio")
     parser.add_argument("--main_data_folder",           type=str, help="main data folder with all the raw data that is to be processed")
     parser.add_argument("--preprocessed_data_folder",   type=str, help="new directory name for the preprocessed data")
@@ -24,10 +24,11 @@ def parse_args():
 
 class DataPreprocessingJtubespeech:
     
-    def __init__(self, main_data_folder, preprocessed_data_folder, audio_format):
+    def __init__(self, main_data_folder, preprocessed_data_folder, audio_format, vtt_files):
         self.main_data_folder = main_data_folder
         self.preprocessed_data_folder = preprocessed_data_folder
         self.audio_format = audio_format
+        self.vtt_files = vtt_files
 
     def data_preprocessing(self):
         # walk and find all .wav and .vtt file
@@ -54,11 +55,13 @@ class DataPreprocessingJtubespeech:
                     preprocess.write_to_txt_file(f'{root_preprocessed}/{Path(file_access).stem}.trans.txt', data_dict)
                     
                 elif file.endswith('.wav'):
-                    # get the vtt filename and extension (because same filename for .wav and .vtt)
-                    file_access_vtt = file_access.split('.')
+                    # get the first vtt filename and extension since timestamps are the same for all vtt files
+                    # same filename for .wav and .vtt but with the language appended to the back for vtt
+                    file_access_vtt = file_access.split('.') 
+                    file_name_vtt = file_access_vtt[0] + "_" + vtt_files[0][4:]
                     
                     # extract the required data (in a dictionary) from the .vtt file
-                    data_dict = preprocess.get_vtt_values(filepath=f'{file_access_vtt[0]}.vtt')
+                    data_dict = preprocess.get_vtt_values(filepath=f'{file_name_vtt}.vtt')
                     
                     # slice the audio files based on the start and end timing
                     preprocess.slice_audio(file_access, root_preprocessed, data_dict)
@@ -80,21 +83,25 @@ if __name__ == '__main__':
     args = parse_args()
 
     ## RESTRUCTURING THE JTUBESPEECH DATA FILE DIRECTORY
-    file_combine_vtt = RestructureFileDirectoryJtubespeech(root_folder=args.root_folder, 
-                                                           dest_folder=args.dest_folder_name, 
-                                                           file_type=args.file_type_vtt)
+    vtt_files = args.file_type_vtt.split("&")
+    for vtt_file in vtt_files:
+        file_combine_vtt = RestructureFileDirectoryJtubespeech(root_folder=args.root_folder, 
+                                                               dest_folder=args.dest_folder_name, 
+                                                               file_type=vtt_file,
+                                                               append_lang_to_filename=vtt_file[4:])
+        file_combine_vtt()
 
     file_combine_wav = RestructureFileDirectoryJtubespeech(root_folder=args.root_folder, 
                                                            dest_folder=args.dest_folder_name,
                                                            file_type=args.file_type_wav)
 
-    file_combine_vtt()
     file_combine_wav()
 
     ## DATA PREPROCESSING OF THE JTUBESPEECH DATA TO THE LIBRISPEECH FORMAT
     preprocess = DataPreprocessingJtubespeech(main_data_folder = args.main_data_folder,
                                               preprocessed_data_folder = args.preprocessed_data_folder,
-                                              audio_format = args.audio_format)
+                                              audio_format = args.audio_format,
+                                              vtt_files = vtt_files)
 
     preprocess()
 
