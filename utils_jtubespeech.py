@@ -101,6 +101,8 @@ class UtilsJtubespeech:
         filename = Path(file_dir).stem
         # replace the .trans with '' in the text file
         filename = filename.replace('.trans', '')
+        # remove the language tag (eg _id) from the file name
+        filename = filename[:-3]
 
         with open(file_dir, 'w+') as f:
             for i,j in enumerate(data_dict['annotation']):
@@ -110,7 +112,6 @@ class UtilsJtubespeech:
                 # text preprocessing using regex
                 #preprocessed_text = re.sub('[^a-zA-Z0-9$%.\' ]', '', preprocessed_text)
                 preprocessed_text = re.sub('[^a-zA-Z0-9$%.\' ]|(?!\d)\.(?!\d)', '', preprocessed_text)
-
 
                 f.write(f'{filename}-{i:04} {preprocessed_text}\n')
 
